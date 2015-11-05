@@ -18,16 +18,19 @@ package io.apigee.buildTools.enterprise4g.utils;
 import java.io.File;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.List;
+import java.util.*;
 
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerConfigurationException;
-import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
+import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathExpression;
 import javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPathFactory;
 
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
@@ -43,142 +46,91 @@ import com.google.gson.GsonBuilder;
  *
  * @author sdey
  */
-
 public class PackageConfigurer {
+    private static final Logger logger = LoggerFactory.getLogger(PackageConfigurer.class);
+    private static final ThreadLocalTransformerFactory tltf = new ThreadLocalTransformerFactory();
 
-    public static void configurePackage(String env, File configFile)
-            throws Exception {
+    private static int runReplacement(String env, ConfigTokens conf, String scope, List<File> toProcess) {
+        int errorCount = 0;
+        for( File xmlFile : toProcess) {
+            try {
+                Document xmlDoc = FileReader.getXMLDocument(xmlFile);
+                Policy tokens;
+                if(StringUtils.equalsIgnoreCase(scope,"proxy")) {
+                    tokens = conf.getConfigbyEnv(env).getProxyFileNameMatch(xmlFile.getName());
+                } else if(StringUtils.equalsIgnoreCase(scope,"policy")) {
+                    tokens = conf.getConfigbyEnv(env).getPolicyFileNameMatch(xmlFile.getName());
+                } else if(StringUtils.equalsIgnoreCase(scope,"target")) {
+                    tokens = conf.getConfigbyEnv(env).getTargetFileNameMatch(xmlFile.getName());
+                } else { continue; } // === N E X T ===
+                xmlDoc = replaceTokens(xmlDoc, tokens);
+                DOMSource source = new DOMSource(xmlDoc);
+                StreamResult result = new StreamResult(xmlFile);
+                tltf.get().transform(source, result);
+            } catch( Exception e) {
+                logger.error("Error processing " + xmlFile.getName(), e);
+                errorCount++;
+            }
+        }
 
-        Logger logger = LoggerFactory.getLogger(PackageConfigurer.class);
+        return errorCount;
+    }
 
-        TransformerFactory transformerFactory = TransformerFactory
-                .newInstance();
-        Transformer transformer = transformerFactory.newTransformer();
+    private static void doTokenReplacement( String env, ConfigTokens conf, Map<String,List<File>> toProcess) {
+        int errorCount = 0;
+        for(Map.Entry<String,List<File>> entry : toProcess.entrySet()) {
+            errorCount += runReplacement(env, conf, entry.getKey(), entry.getValue());
+        }
+
+        if( errorCount > 0) {
+            // some errors?  Whine & quit.
+            logger.error(String.format("Encountered %d errors; see above.  Quitting", errorCount));
+            throw new RuntimeException("Several errors encountered -- exiting"); // ** pouf **
+        }
+    }
+
+    public static void configurePackage(String env, File configFile) throws Exception {
+        Transformer transformer = tltf.get();
 
         // get the list of files in proxies folder
         XMLFileListUtil listFileUtil = new XMLFileListUtil();
 
-        List<File> fileList = listFileUtil.getProxyFiles(configFile);
-        FileReader fileutil = new FileReader();
+        ConfigTokens conf = FileReader.getBundleConfigs(configFile);
 
-        ConfigTokens conf = fileutil.getBundleConfigs(configFile);
+        Map<String,List<File>> filesToProcess = new HashMap<String,List<File>>();
+        filesToProcess.put("proxy",listFileUtil.getProxyFiles(configFile));
+        filesToProcess.put("policy",listFileUtil.getPolicyFiles(configFile));
+        filesToProcess.put("target",listFileUtil.getTargetFiles(configFile));
 
-        for (int i = 0; i < fileList.size(); i++) {
+        doTokenReplacement(env, conf, filesToProcess);
 
-            Document xmlDoc = fileutil.getXMLDocument(fileList.get(i));
+        // special case ...
+        File proxyFile = listFileUtil.getAPIProxyFiles(configFile).get(0);
+        Document xmlDoc = FileReader.getXMLDocument(proxyFile); // there would be only one file, at least one file
 
-            try {
-                Policy configTokens = conf.getConfigbyEnv(env)
-                        .getProxyFileNameMatch(fileList.get(i).getName());
-                // logger.info("\n\n=============Replacing config tokens for Environment {}, for policy or proxy file name {}================\n",env,fileList.get(i).getName());
-                if (configTokens != null) {
-                    logger.info(
-                            "=============Replacing config tokens for Environment {}, for proxy file name {}================\n",
-                            env, fileList.get(i).getName());
-                    xmlDoc = replaceTokens(xmlDoc, configTokens);
-                    DOMSource source = new DOMSource(xmlDoc);
-                    StreamResult result = new StreamResult(fileList.get(i));
-                    transformer.transform(source, result);
-                }
-            } catch (Exception e) {
-                logger.error(
-                        "\n\n=============No config tokens found for Environment {}, for proxy file name {}================\n",
-                        env, fileList.get(i).getName());
-                throw e;
-            }
+        XPathFactory factory = XPathFactory.newInstance();
+        XPath xpath = factory.newXPath();
+        XPathExpression expression = xpath.compile("/APIProxy/Description");
 
-        }
-
-        // get the list of files in policies folder
-        fileList = listFileUtil.getPolicyFiles(configFile);
-        for (int i = 0; i < fileList.size(); i++) {
-
-            Document xmlDoc = fileutil.getXMLDocument(fileList.get(i));
-
-            try {
-                Policy configTokens = conf.getConfigbyEnv(env)
-                        .getPolicyFileNameMatch(fileList.get(i).getName());
-                if (configTokens != null) {
-                    logger.info(
-                            "=============Replacing config tokens for Environment {}, for policy file name {}================\n",
-                            env, fileList.get(i).getName());
-                    xmlDoc = replaceTokens(xmlDoc, configTokens);
-                    DOMSource source = new DOMSource(xmlDoc);
-                    StreamResult result = new StreamResult(fileList.get(i));
-                    transformer.transform(source, result);
-                }
-            } catch (Exception e) {
-                logger.error(
-                        "\n\n=============No config tokens found for Environment {}, for proxy file name {}================\n",
-                        env, fileList.get(i).getName());
-                throw e;
-            }
-
-        }
-
-        // get the list of files in targets folder
-        fileList = listFileUtil.getTargetFiles(configFile);
-        for (int i = 0; i < fileList.size(); i++) {
-
-            Document xmlDoc = fileutil.getXMLDocument(fileList.get(i));
-
-            try {
-                Policy configTokens = conf.getConfigbyEnv(env)
-                        .getTargetFileNameMatch(fileList.get(i).getName());
-                if (configTokens != null) {
-                    logger.info(
-                            "=============Replacing config tokens for Environment {}, for policy file name {}================\n",
-                            env, fileList.get(i).getName());
-                    xmlDoc = replaceTokens(xmlDoc, configTokens);
-                    DOMSource source = new DOMSource(xmlDoc);
-                    StreamResult result = new StreamResult(fileList.get(i));
-                    transformer.transform(source, result);
-                }
-            } catch (Exception e) {
-                logger.error(
-                        "\n\n=============No config tokens found for Environment {}, for proxy file name {}================\n",
-                        env, fileList.get(i).getName());
-                throw e;
-            }
-
-        }
-
-
-        // update application metadata in the apiproxy folder
-
-        // get the list of files in targets folder
-        fileList = listFileUtil.getAPIProxyFiles(configFile);
-
-        Document xmlDoc = fileutil.getXMLDocument(fileList.get(0)); // there would be only one file, at least one file
-
-        javax.xml.xpath.XPathFactory factory = javax.xml.xpath.XPathFactory.newInstance();
-        javax.xml.xpath.XPath xpath = factory.newXPath();
-        javax.xml.xpath.XPathExpression expression = xpath.compile("/APIProxy/Description");
-
-        NodeList nodes = (NodeList) expression.evaluate(xmlDoc,
-                XPathConstants.NODESET);
-
+        NodeList nodes = (NodeList) expression.evaluate(xmlDoc, XPathConstants.NODESET);
         if (nodes.item(0).hasChildNodes()) {
             // sets the description to whatever is in the <proxyname>.xml file
             nodes.item(0).setTextContent(expression.evaluate(xmlDoc));
         } else {
             // if Description is empty, then it reverts back to appending the username, git hash, etc
-            nodes.item(0).setTextContent(getComment(fileList.get(0)));
+            nodes.item(0).setTextContent(getComment(proxyFile));
         }
 
         DOMSource source = new DOMSource(xmlDoc);
-        StreamResult result = new StreamResult(fileList.get(0));
+        StreamResult result = new StreamResult(proxyFile);
         transformer.transform(source, result);
     }
 
     public static Document replaceTokens(Document doc, Policy configTokens)
             throws XPathExpressionException, TransformerConfigurationException {
 
-        Logger logger = LoggerFactory.getLogger(PackageConfigurer.class);
-
-        javax.xml.xpath.XPathFactory factory = javax.xml.xpath.XPathFactory
-                .newInstance();
-        javax.xml.xpath.XPath xpath = factory.newXPath();
+        XPathFactory factory = XPathFactory.newInstance();
+        XPath xpath = factory.newXPath();
 
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
         String json = gson.toJson(configTokens);
@@ -192,7 +144,7 @@ public class PackageConfigurer {
                 logger.debug(
                         "=============Checking for Xpath Expressions {}  ================\n",
                         configTokens.tokens.get(i).xpath);
-                javax.xml.xpath.XPathExpression expression = xpath
+                XPathExpression expression = xpath
                         .compile(configTokens.tokens.get(i).xpath);
 
                 NodeList nodes = (NodeList) expression.evaluate(doc,
@@ -213,24 +165,23 @@ public class PackageConfigurer {
             }
 
             return doc;
-        } catch (Exception e) {
+        } catch (XPathExpressionException e) {
 
-            logger.error(
-                    "\n\n=============The Xpath Expressions in config.json are incorrect. Please check. ================\n\n{}",
-                    e.getMessage());
-            throw (XPathExpressionException) e;
+            logger.error(String.format("\n\n=============The Xpath Expressions in config.json are incorrect. Please check. ================\n\n%s",
+                    e.getMessage()), e);
+            throw e;
         }
 
     }
 
     protected static String getComment(File basePath) {
         try {
-            String hostname = "unknown";
+            String hostname;
             String user = System.getProperty("user.name", "unknown");
             try {
                 hostname = InetAddress.getLocalHost().getHostName();
-
             } catch (UnknownHostException e) {
+                hostname = InetAddress.getLocalHost().getHostAddress();
             }
             return user + " " + getScmRevision(basePath) + " " + hostname;
         } catch (Throwable t) {
@@ -240,7 +191,7 @@ public class PackageConfigurer {
     }
 
     protected static String getScmRevision(File basePath ) {
-        String rev = null;
+        String rev;
         try {
             GitUtil gu = new GitUtil(basePath);
             String tagName = gu.getTagNameForWorkspaceHeadRevision();
@@ -249,11 +200,7 @@ public class PackageConfigurer {
             String revNum = gu.getWorkspaceHeadRevisionString();
             revNum = revNum.substring(0, Math.min(revNum.length(), 8));
             rev = rev + revNum ;
-
         } catch (Throwable e) {
-            rev = null;
-        }
-        if (rev == null) {
             rev = "git revision unknown";
         }
 

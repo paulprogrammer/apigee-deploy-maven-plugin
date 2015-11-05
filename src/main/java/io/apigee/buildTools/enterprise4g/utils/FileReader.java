@@ -36,42 +36,22 @@ import com.google.gson.Gson;
  * 
  * @author sdey
  */
-
 public class FileReader {
+    private static final Logger logger = LoggerFactory.getLogger(FileReader.class);
 
-	public Document getXMLDocument(File filepath) throws SAXException,
-			IOException, ParserConfigurationException
+    private static final Gson gson = new Gson();
+    private static final ThreadLocalDocumentBuilder tldb = new ThreadLocalDocumentBuilder();
 
-	{
-		// Create a builder factory
-		DocumentBuilderFactory docFactory = DocumentBuilderFactory
-				.newInstance();
-
-		// Create the builder and parse the file
-		DocumentBuilder docBuilder = docFactory.newDocumentBuilder();
-		//Document doc = docBuilder.parse("/Users/santanudey/Projects/4G/code-fest/project/apiproxy/proxies/proxy.xml");
-		Document doc = docBuilder.parse(filepath);
-		return doc;
+	public static Document getXMLDocument(File filepath) throws SAXException, IOException {
+		DocumentBuilder docBuilder = tldb.get();
+		return docBuilder.parse(filepath);
 	}
 
-	public ConfigTokens getBundleConfigs(File filepath) throws FileNotFoundException
-
-	{
-		ConfigTokens conf = new ConfigTokens();
-
-		Gson gson = new Gson();
-
-		BufferedReader bufferedReader = new BufferedReader(
-				new java.io.FileReader(filepath));
-		conf = gson.fromJson(bufferedReader, ConfigTokens.class); // binds the file to data config objects
-		
-		Logger logger = LoggerFactory.getLogger(FileReader.class);
-		
-//		logger.info("\n\n=============Reading the config file================\n\n{}", conf.toString());
-		logger.info("============= Reading the config file located at ================\n{}",  filepath.getAbsolutePath());
-		
-		
-		
+	public static ConfigTokens getBundleConfigs(File filepath) throws FileNotFoundException {
+		ConfigTokens conf;
+		BufferedReader bufferedReader = new BufferedReader(new java.io.FileReader(filepath));
+		conf = gson.fromJson(bufferedReader, ConfigTokens.class);
+		logger.info("Using package config {}",  filepath.getAbsolutePath());
 		return conf;
 	}
 

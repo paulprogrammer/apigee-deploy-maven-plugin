@@ -24,38 +24,7 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-//import javax.xml.parsers.ParserConfigurationException;
-//import javax.xml.transform.SourceLocator;
-//import javax.xml.xpath.XPathExpressionException;
-//
-//import org.apache.xpath.XPath;
-//import org.w3c.dom.Document;
-//import org.xml.sax.SAXException;
-
 public class XMLFileListUtil {
-
-	//	public static void main(String[] args) throws IOException, SAXException, ParserConfigurationException, XPathExpressionException {
-	//		XMLFileListUtil util = new XMLFileListUtil();
-	//
-	//		File folder1 = new File(
-	//				"/Users/santanudey/Projects/4G/code-fest/project/apiproxy/proxies");
-	//		List<File> fileList = util.getXMLFiles(folder1);
-	//		FileReader fr= new FileReader();
-	//		int i = 0;
-	//		while (i < fileList.size()) {
-	//			
-	//			Document dom = fr.getXMLDocument(fileList.get(i));
-	//			
-	//			javax.xml.xpath.XPathFactory factory = 
-	//            javax.xml.xpath.XPathFactory.newInstance();
-	//			javax.xml.xpath.XPath xpath = factory.newXPath();
-	//			javax.xml.xpath.XPathExpression expression = xpath.compile("/ProxyEndpoint/Description/text()");
-	//
-	//			System.out.println(((expression.evaluate(dom))));
-	//			i++;
-	//		}
-	//
-	//	}
 
 	public List<File> getProxyFiles(File configFile) throws IOException { // assumes the present directory is at
 		// the project pom level.

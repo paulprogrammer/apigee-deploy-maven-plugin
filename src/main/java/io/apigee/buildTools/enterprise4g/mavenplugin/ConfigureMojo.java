@@ -25,7 +25,6 @@ import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 
-
 /**
  * Goal to upload 4g gateway  bundle on server
  *
@@ -33,9 +32,9 @@ import java.io.File;
  * @goal configure
  * @phase package
  */
-
 public class ConfigureMojo extends GatewayAbstractMojo {
 
+    private static final Logger logger = LoggerFactory.getLogger(ConfigureMojo.class);
 
 	public void execute() throws MojoExecutionException, MojoFailureException {
 
@@ -44,11 +43,10 @@ public class ConfigureMojo extends GatewayAbstractMojo {
 			return;
 		}
 
-		Logger logger = LoggerFactory.getLogger(ConfigureMojo.class);
-		File configFile = findConfigFile(logger);
+		File configFile = findConfigFile();
 
 		if (configFile != null) {
-			configurePackage(logger, configFile);
+			configurePackage( configFile);
 		}
 
         logger.info("\n\n=============Checking for node.js app================\n\n");
@@ -71,7 +69,7 @@ public class ConfigureMojo extends GatewayAbstractMojo {
                     FileUtils.deleteDirectory(nodeDir);
                     FileUtils.copyDirectory(externalNodeDir, nodeDir);
                 }catch(Exception e){
-                    throw new MojoExecutionException(e.getMessage());
+                    throw new MojoExecutionException(e.getMessage(), e);
                 }
             }
         }
@@ -94,7 +92,7 @@ public class ConfigureMojo extends GatewayAbstractMojo {
                                 dirFile, fileName);
                         FileUtils.deleteDirectory(dirFile);
                     } catch (Exception e) {
-                        throw new MojoExecutionException(e.getMessage());
+                        throw new MojoExecutionException(e.getMessage(), e);
                     }
                 }
             }
@@ -108,11 +106,11 @@ public class ConfigureMojo extends GatewayAbstractMojo {
 			zu.zipDir(new File(super.getApplicationBundlePath()),
 					new File(super.getBuildDirectory() + "/apiproxy"), "apiproxy");
 		} catch (Exception e) {
-			throw new MojoExecutionException(e.getMessage());
+			throw new MojoExecutionException(e.getMessage(), e);
 		}
 	}
 
-	private void configurePackage(Logger logger, File configFile) throws MojoExecutionException {
+	private void configurePackage( File configFile) throws MojoExecutionException {
 		logger.debug("\n\n=============Now updating the configuration values for the App Bundle================\n\n");
 		try {
 			if (super.getProfile().getProfileId() != null && super.getProfile().getProfileId() != "") {
@@ -126,7 +124,7 @@ public class ConfigureMojo extends GatewayAbstractMojo {
 		}
 	}
 
-	private File findConfigFile(Logger logger) throws MojoExecutionException {
+	private File findConfigFile() throws MojoExecutionException {
 		File configFile = new File(super.getBaseDirectoryPath() + File.separator + "config.json");
 
 		if (configFile.exists()) {
